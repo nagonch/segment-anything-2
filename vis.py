@@ -13,5 +13,4 @@ for i in range(81):
         image=image,
         colormap=imgviz.label_colormap(mask.max() + 1),
     )
-    plt.imshow(vis)
-    plt.savefig(f"results/{str(i).zfill(4)}.png")
+    Image.fromarray(vis).save(f"results/{str(i).zfill(4)}.png")
