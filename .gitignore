@@ -8,3 +8,7 @@ build/*
 _C.*
 outputs/*
 checkpoints/*.pt
+venv
+*.jpeg
+*.png
+*.pt
