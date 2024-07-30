@@ -6,7 +6,6 @@ import numpy as np
 from PIL import Image
 from sam2.utils.amg import build_all_layer_point_grids
 import os
-import imgviz
 import shutil
 
 
@@ -36,6 +35,20 @@ def save_LF_lawnmower(LF):
                 frame_n += 1
 
 
+def LF_lawnmower(LF):
+    result_LF = []
+    rows, cols, u, v = LF.shape
+    for i in range(rows):
+        if i % 2 == 0:
+            for j in range(cols):
+                result_LF.append(LF[i, j])
+        else:
+            for j in range(cols - 1, -1, -1):
+                result_LF.append(LF[i, j])
+    result_LF = torch.stack(result_LF).reshape(rows, cols, u, v)
+    return result_LF
+
+
 # Load predictor
 def get_predictor():
     checkpoint = (
@@ -56,7 +69,6 @@ def inference(predictor, LF):
     points = np.stack(points)[0]
     points = points * np.array([float(u), float(v)])
     labels = np.ones((points.shape[0])).astype(np.int32)
-    result_mask_LF = []
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
         state = predictor.init_state("/home/cedaradmin/repos/segment-anything-2/LF")
         for i, (point, label) in enumerate(zip(points, labels)):
@@ -84,10 +96,28 @@ def inference(predictor, LF):
             torch.save(masks_result, f"results/{str(out_frame_idx).zfill(4)}.pt")
 
 
+def reshape_results(LF_original, result_filename="LF.pt"):
+    s, t, u, v, _ = LF_original.shape
+    LF_masks = []
+    for filename in sorted(os.listdir("results")):
+        if not filename.endswith("pt") or filename == result_filename:
+            continue
+        aperture = torch.load(f"results/{filename}")
+        LF_masks.append(aperture)
+    LF_masks = torch.stack(LF_masks).cuda().reshape(s, t, u, v)
+    LF_masks = LF_lawnmower(LF_masks)
+    torch.save(LF_masks, f"results/{result_filename}")
+    return LF_masks
+
+
 # Clean up LF folder
 if __name__ == "__main__":
     LF = get_LF()
     save_LF_lawnmower(LF)
     predictor = get_predictor()
     inference(predictor, LF)
+    del predictor
+    torch.cuda.empty_cache()
+    masks = reshape_results(LF).cpu().numpy()
+
     shutil.rmtree("LF")
