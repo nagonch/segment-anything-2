@@ -64,3 +64,9 @@ class HCIOldDataset(Dataset):
         labels = self.get_labels(scene_name)
         disparity = self.get_disparity(scene_name)
         return LF, labels, disparity
+
+
+if __name__ == "__main__":
+    dataset = HCIOldDataset()
+    LF, _, _ = dataset[0]
+    print(LF.shape)

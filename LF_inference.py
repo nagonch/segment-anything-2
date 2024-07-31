@@ -7,6 +7,7 @@ from PIL import Image
 from sam2.utils.amg import build_all_layer_point_grids
 import os
 import shutil
+from data import HCIOldDataset
 
 
 # Load LF
@@ -96,28 +97,41 @@ def inference(predictor, LF):
             torch.save(masks_result, f"results/{str(out_frame_idx).zfill(4)}.pt")
 
 
-def reshape_results(LF_original, result_filename="LF.pt"):
+def save_results(LF_original, result_filename="LF.pt"):
     s, t, u, v, _ = LF_original.shape
     LF_masks = []
     for filename in sorted(os.listdir("results")):
-        if not filename.endswith("pt") or filename == result_filename:
+        if (
+            not filename.endswith("pt")
+            or filename == result_filename
+            or "result" in filename
+        ):
             continue
         aperture = torch.load(f"results/{filename}")
         LF_masks.append(aperture)
+        os.remove(f"results/{filename}")
     LF_masks = torch.stack(LF_masks).cuda().reshape(s, t, u, v)
     LF_masks = LF_lawnmower(LF_masks)
     torch.save(LF_masks, f"results/{result_filename}")
-    return LF_masks
+    del LF_masks
+
+
+def main():
+    dataset = HCIOldDataset("HCI_dataset_old")
+    for i, item in enumerate(dataset):
+        LF, _, _ = item
+        save_LF_lawnmower(LF)
+        predictor = get_predictor()
+        inference(predictor, LF)
+        del predictor
+        torch.cuda.empty_cache()
+        save_results(
+            LF,
+            f"{str(i).zfill(4)}_result.pth",
+        )
+        shutil.rmtree("LF")
 
 
 # Clean up LF folder
 if __name__ == "__main__":
-    LF = get_LF()
-    save_LF_lawnmower(LF)
-    predictor = get_predictor()
-    inference(predictor, LF)
-    del predictor
-    torch.cuda.empty_cache()
-    masks = reshape_results(LF).cpu().numpy()
-
-    shutil.rmtree("LF")
+    main()
