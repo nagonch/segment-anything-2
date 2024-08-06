@@ -10,16 +10,6 @@ import shutil
 from data import HCIOldDataset
 
 
-# Load LF
-def get_LF():
-    scene = h5py.File(
-        "/home/cedaradmin/repos/LF_SAM_segmentation/HCI_dataset_old/papillon/lf.h5",
-        "r",
-    )
-    LF = np.array(scene["LF"])
-    return LF
-
-
 # Save LF temp save LF to folder
 def save_LF_lawnmower(LF):
     os.makedirs("LF", exist_ok=True)
@@ -52,9 +42,7 @@ def LF_lawnmower(LF):
 
 # Load predictor
 def get_predictor():
-    checkpoint = (
-        "/home/cedaradmin/repos/segment-anything-2/checkpoints/sam2_hiera_tiny.pt"
-    )
+    checkpoint = "checkpoints/sam2_hiera_tiny.pt"
     model_cfg = "sam2_hiera_t.yaml"
     predictor = build_sam2_video_predictor(model_cfg, checkpoint)
     return predictor
@@ -63,7 +51,7 @@ def get_predictor():
 def inference(predictor, LF):
     s, t, u, v, c = LF.shape
     points = build_all_layer_point_grids(
-        4,
+        8,
         0,
         1,
     )
@@ -71,7 +59,7 @@ def inference(predictor, LF):
     points = points * np.array([float(u), float(v)])
     labels = np.ones((points.shape[0])).astype(np.int32)
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-        state = predictor.init_state("/home/cedaradmin/repos/segment-anything-2/LF")
+        state = predictor.init_state("LF")
         for i, (point, label) in enumerate(zip(points, labels)):
             frame_idx, object_ids, masks = predictor.add_new_points(
                 state,
