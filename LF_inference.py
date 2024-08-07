@@ -51,7 +51,7 @@ def get_predictor():
 def inference(predictor, LF):
     s, t, u, v, c = LF.shape
     points = build_all_layer_point_grids(
-        4,
+        8,
         0,
         1,
     )
