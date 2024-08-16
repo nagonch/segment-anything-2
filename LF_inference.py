@@ -9,6 +9,8 @@ import os
 import shutil
 from data import HCIOldDataset
 
+BATCH_SIZE = 16
+
 
 # Save LF temp save LF to folder
 def save_LF_lawnmower(LF):
@@ -48,7 +50,7 @@ def get_predictor():
     return predictor
 
 
-def inference(predictor, LF):
+def inference(predictor, LF, batch_size=BATCH_SIZE):
     s, t, u, v, c = LF.shape
     points = build_all_layer_point_grids(
         8,
@@ -58,46 +60,61 @@ def inference(predictor, LF):
     points = np.stack(points)[0]
     points = points * np.array([float(u), float(v)])
     labels = np.ones((points.shape[0])).astype(np.int32)
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-        state = predictor.init_state("LF")
-        for i, (point, label) in enumerate(zip(points, labels)):
-            frame_idx, object_ids, masks = predictor.add_new_points(
-                state,
-                frame_idx=0,
-                obj_id=i + 1,
-                points=point[None],
-                labels=label[None],
-            )
-        for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(
-            state
-        ):
-            masks = torch.stack(
-                [
-                    (mask > 0.0).long()[0] * (i + 1)
-                    for i, mask in enumerate(out_mask_logits)
-                ]
-            ).cuda()
-            areas = masks.sum(dim=(1, 2))
-            masks_result = torch.zeros_like(masks[0])
-            for i, mask_ind in enumerate(torch.argsort(areas, descending=True)):
-                masks_result += masks[mask_ind] * i
-                masks_result = torch.clip(masks_result, 0, i).long()
-            torch.save(masks_result, f"results/{str(out_frame_idx).zfill(4)}.pt")
+    n_batches = np.ceil(points.shape[0] / batch_size)
+    points = np.array_split(points, n_batches)
+    labels = np.array_split(labels, n_batches)
+    for batch_i, (points_batch, labels_batch) in enumerate(zip(points, labels)):
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
+            state = predictor.init_state("LF")
+            for i, (point, label) in enumerate(zip(points_batch, labels_batch)):
+                frame_idx, object_ids, masks = predictor.add_new_points(
+                    state,
+                    frame_idx=0,
+                    obj_id=i + 1,
+                    points=point[None],
+                    labels=label[None],
+                )
+            for (
+                out_frame_idx,
+                out_obj_ids,
+                out_mask_logits,
+            ) in predictor.propagate_in_video(state):
+                masks = torch.stack(
+                    [
+                        (mask > 0.0).long()[0] * (i + 1)
+                        for i, mask in enumerate(out_mask_logits)
+                    ]
+                ).cuda()
+                areas = masks.sum(dim=(1, 2))
+                masks_result = torch.zeros_like(masks[0])
+                for i, mask_ind in enumerate(torch.argsort(areas, descending=True)):
+                    masks_result += masks[mask_ind] * i
+                    masks_result = torch.clip(masks_result, 0, i).long()
+                torch.save(
+                    masks_result,
+                    f"results/{str(out_frame_idx).zfill(4)}_{str(batch_i).zfill(4)}.pt",
+                )
 
 
-def save_results(LF_original, result_filename="LF.pt"):
+def save_results(LF_original, result_filename="LF.pt", batch_size=BATCH_SIZE):
     s, t, u, v, _ = LF_original.shape
+    n_imgs = s * t
     LF_masks = []
-    for filename in sorted(os.listdir("results")):
-        if (
-            not filename.endswith("pt")
-            or filename == result_filename
-            or "result" in filename
-        ):
-            continue
-        aperture = torch.load(f"results/{filename}")
-        LF_masks.append(aperture)
-        os.remove(f"results/{filename}")
+    for img_i in range(n_imgs):
+        batch_masks = []
+        max_segment_num = 0
+        for batch_i in range(batch_size):
+            filename = f"results/{str(img_i).zfill(4)}_{str(batch_i).zfill(4)}.pt"
+            if not os.path.exists(filename):
+                continue
+            mask = torch.load(filename)
+            mask[mask != 0] += max_segment_num
+            max_segment_num = mask.max()
+            batch_masks.append(mask)
+            os.remove(filename)
+        masks_i = torch.stack(batch_masks)
+        masks_i = torch.sum(masks_i, dim=0)
+        LF_masks.append(masks_i)
     LF_masks = torch.stack(LF_masks).cuda().reshape(s, t, u, v)
     LF_masks = LF_lawnmower(LF_masks)
     torch.save(LF_masks, f"results/{result_filename}")

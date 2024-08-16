@@ -2,7 +2,8 @@ import h5py
 import numpy as np
 import imgviz
 from plenpy.lightfields import LightField
-import torch
+
+# import torch
 
 
 # Load LF
@@ -40,5 +41,5 @@ def visualize_segmentation_mask(
 
 if __name__ == "__main__":
     LF = get_LF()
-    masks = torch.load("results/LF.pt").cpu().numpy()
+    masks = np.load("masks.npy")
     visualize_segmentation_mask(masks, LF)
