@@ -8,7 +8,7 @@ from sam2.utils.amg import build_all_layer_point_grids
 import os
 import shutil
 from data import HCIOldDataset
-from sam2.sam2_image_predictor import SAM2ImagePredictor
+from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
 BATCH_SIZE = 16
 MODEL_CHECKPOINT = "checkpoints/sam2_hiera_tiny.pt"
@@ -46,7 +46,7 @@ def LF_lawnmower(LF):
 
 
 def get_image_predictor():
-    predictor = SAM2ImagePredictor(build_sam2(MODEL_CONFIG, MODEL_CHECKPOINT))
+    predictor = SAM2AutomaticMaskGenerator(build_sam2(MODEL_CONFIG, MODEL_CHECKPOINT))
     return predictor
 
 
@@ -143,4 +143,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    img = get_image_predictor()
+    video = get_video_predictor()
+    print(torch.cuda.mem_get_info()[0] / torch.cuda.mem_get_info()[1])
