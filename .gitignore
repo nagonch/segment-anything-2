@@ -34,3 +34,4 @@ bundles/
 vendor/pkg/
 pyenv
 Vagrantfile
+*.h5
