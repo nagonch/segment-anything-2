@@ -1,5 +1,5 @@
 import torch
-from sam2.build_sam import build_sam2_video_predictor
+from sam2.build_sam import build_sam2_video_predictor, build_sam2
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,8 +8,11 @@ from sam2.utils.amg import build_all_layer_point_grids
 import os
 import shutil
 from data import HCIOldDataset
+from sam2.sam2_image_predictor import SAM2ImagePredictor
 
 BATCH_SIZE = 16
+MODEL_CHECKPOINT = "checkpoints/sam2_hiera_tiny.pt"
+MODEL_CONFIG = "sam2_hiera_t.yaml"
 
 
 # Save LF temp save LF to folder
@@ -42,11 +45,13 @@ def LF_lawnmower(LF):
     return result_LF
 
 
-# Load predictor
-def get_predictor():
-    checkpoint = "checkpoints/sam2_hiera_tiny.pt"
-    model_cfg = "sam2_hiera_t.yaml"
-    predictor = build_sam2_video_predictor(model_cfg, checkpoint)
+def get_image_predictor():
+    predictor = SAM2ImagePredictor(build_sam2(MODEL_CONFIG, MODEL_CHECKPOINT))
+    return predictor
+
+
+def get_video_predictor():
+    predictor = build_sam2_video_predictor(MODEL_CONFIG, MODEL_CHECKPOINT)
     return predictor
 
 
@@ -126,7 +131,7 @@ def main():
     for i, item in enumerate(dataset):
         LF, _, _ = item
         save_LF_lawnmower(LF)
-        predictor = get_predictor()
+        predictor = get_video_predictor()
         inference(predictor, LF)
         del predictor
         torch.cuda.empty_cache()
@@ -137,6 +142,5 @@ def main():
         shutil.rmtree("LF")
 
 
-# Clean up LF folder
 if __name__ == "__main__":
     main()
