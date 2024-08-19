@@ -46,7 +46,14 @@ def LF_lawnmower(LF):
 
 
 def get_image_predictor():
-    predictor = SAM2AutomaticMaskGenerator(build_sam2(MODEL_CONFIG, MODEL_CHECKPOINT))
+    predictor = SAM2AutomaticMaskGenerator(
+        build_sam2(
+            MODEL_CONFIG,
+            MODEL_CHECKPOINT,
+            device="cuda",
+            apply_postprocessing=False,
+        )
+    )
     return predictor
 
 
@@ -143,7 +150,11 @@ def main():
 
 
 if __name__ == "__main__":
-    # main()
-    img = get_image_predictor()
-    video = get_video_predictor()
-    print(torch.cuda.mem_get_info()[0] / torch.cuda.mem_get_info()[1])
+    img_predictor = get_image_predictor()
+    # video_predictor = get_video_predictor()
+    dataset = HCIOldDataset("HCI_dataset_old")
+    LF, _, _ = dataset[0]
+    subview_1 = LF[0][0]
+    result = img_predictor.generate(subview_1)
+    result = torch.stack([torch.tensor(x["segmentation"]).cuda() for x in result])
+    print(result.shape)
