@@ -72,35 +72,22 @@ def batchify_masks(masks):
     return torch.tensor_split(masks, math.ceil(masks.shape[0] / BATCH_SIZE))
 
 
-def inference(predictor, LF, batch_size=BATCH_SIZE):
-    s, t, u, v, c = LF.shape
-    points = build_all_layer_point_grids(
-        8,
-        0,
-        1,
-    )
-    points = np.stack(points)[0]
-    points = points * np.array([float(u), float(v)])
-    labels = np.ones((points.shape[0])).astype(np.int32)
-    n_batches = np.ceil(points.shape[0] / batch_size)
-    points = np.array_split(points, n_batches)
-    labels = np.array_split(labels, n_batches)
-    for batch_i, (points_batch, labels_batch) in enumerate(zip(points, labels)):
+def propagate_masks(masks_batchified, video_predictor):
+    for batch_i, batch in enumerate(masks_batchified):
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-            state = predictor.init_state("LF")
-            for i, (point, label) in enumerate(zip(points_batch, labels_batch)):
-                frame_idx, object_ids, masks = predictor.add_new_points(
+            state = video_predictor.init_state("LF")
+            for i, mask in enumerate(batch):
+                frame_idx, object_ids, masks = video_predictor.add_new_mask(
                     state,
                     frame_idx=0,
                     obj_id=i + 1,
-                    points=point[None],
-                    labels=label[None],
+                    mask=mask,
                 )
             for (
                 out_frame_idx,
                 out_obj_ids,
                 out_mask_logits,
-            ) in predictor.propagate_in_video(state):
+            ) in video_predictor.propagate_in_video(state):
                 masks = torch.stack(
                     [
                         (mask > 0.0).long()[0] * (i + 1)
@@ -167,14 +154,4 @@ if __name__ == "__main__":
     subview = LF[0][0]
     masks = get_subview_masks(img_predictor, subview)
     masks_batchified = batchify_masks(masks)
-    for batch_i, batch in enumerate(masks_batchified):
-        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-            state = video_predictor.init_state("LF")
-            for i, mask in enumerate(batch):
-                frame_idx, object_ids, masks = video_predictor.add_new_mask(
-                    state,
-                    frame_idx=0,
-                    obj_id=i + 1,
-                    mask=mask,
-                )
-        raise
+    propagate_masks(masks_batchified, video_predictor)
