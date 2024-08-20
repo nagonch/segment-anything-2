@@ -62,6 +62,12 @@ def get_video_predictor():
     return predictor
 
 
+def get_subview_masks(image_predictor, subview):
+    result = image_predictor.generate(subview)
+    result = torch.stack([torch.tensor(x["segmentation"]).cuda() for x in result])
+    return result
+
+
 def inference(predictor, LF, batch_size=BATCH_SIZE):
     s, t, u, v, c = LF.shape
     points = build_all_layer_point_grids(
@@ -155,6 +161,4 @@ if __name__ == "__main__":
     dataset = HCIOldDataset("HCI_dataset_old")
     LF, _, _ = dataset[0]
     subview_1 = LF[0][0]
-    result = img_predictor.generate(subview_1)
-    result = torch.stack([torch.tensor(x["segmentation"]).cuda() for x in result])
-    print(result.shape)
+    print(get_subview_masks(img_predictor, subview_1).shape)
