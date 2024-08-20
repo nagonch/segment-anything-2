@@ -161,10 +161,20 @@ def main():
 
 if __name__ == "__main__":
     img_predictor = get_image_predictor()
-    # video_predictor = get_video_predictor()
+    video_predictor = get_video_predictor()
     dataset = HCIOldDataset("HCI_dataset_old")
     LF, _, _ = dataset[0]
     subview = LF[0][0]
     masks = get_subview_masks(img_predictor, subview)
-    for tens in batchify_masks(masks):
-        print(tens.shape)
+    masks_batchified = batchify_masks(masks)
+    for batch_i, batch in enumerate(masks_batchified):
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
+            state = video_predictor.init_state("LF")
+            for i, mask in enumerate(batch):
+                frame_idx, object_ids, masks = video_predictor.add_new_mask(
+                    state,
+                    frame_idx=0,
+                    obj_id=i + 1,
+                    mask=mask,
+                )
+        raise
