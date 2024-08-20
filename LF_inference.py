@@ -6,16 +6,16 @@ import numpy as np
 from PIL import Image
 from sam2.utils.amg import build_all_layer_point_grids
 import os
+import math
 import shutil
 from data import HCIOldDataset
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
-BATCH_SIZE = 16
+BATCH_SIZE = 10
 MODEL_CHECKPOINT = "checkpoints/sam2_hiera_tiny.pt"
 MODEL_CONFIG = "sam2_hiera_t.yaml"
 
 
-# Save LF temp save LF to folder
 def save_LF_lawnmower(LF):
     os.makedirs("LF", exist_ok=True)
     rows, cols, _, _, _ = LF.shape
@@ -66,6 +66,10 @@ def get_subview_masks(image_predictor, subview):
     result = image_predictor.generate(subview)
     result = torch.stack([torch.tensor(x["segmentation"]).cuda() for x in result])
     return result
+
+
+def batchify_masks(masks):
+    return torch.tensor_split(masks, math.ceil(masks.shape[0] / BATCH_SIZE))
 
 
 def inference(predictor, LF, batch_size=BATCH_SIZE):
@@ -160,5 +164,7 @@ if __name__ == "__main__":
     # video_predictor = get_video_predictor()
     dataset = HCIOldDataset("HCI_dataset_old")
     LF, _, _ = dataset[0]
-    subview_1 = LF[0][0]
-    print(get_subview_masks(img_predictor, subview_1).shape)
+    subview = LF[0][0]
+    masks = get_subview_masks(img_predictor, subview)
+    for tens in batchify_masks(masks):
+        print(tens.shape)
