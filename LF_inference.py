@@ -88,17 +88,8 @@ def propagate_masks(masks_batchified, video_predictor):
                 out_obj_ids,
                 out_mask_logits,
             ) in video_predictor.propagate_in_video(state):
-                masks = torch.stack(
-                    [
-                        (mask > 0.0).long()[0] * (i + 1)
-                        for i, mask in enumerate(out_mask_logits)
-                    ]
-                ).cuda()
-                areas = masks.sum(dim=(1, 2))
-                masks_result = torch.zeros_like(masks[0])
-                for i, mask_ind in enumerate(torch.argsort(areas, descending=True)):
-                    masks_result += masks[mask_ind] * i
-                    masks_result = torch.clip(masks_result, 0, i).long()
+                out_mask_logits = out_mask_logits[:, 0, :, :] > 0.0
+                masks_result = out_mask_logits.to_sparse()
                 torch.save(
                     masks_result,
                     f"results/{str(out_frame_idx).zfill(4)}_{str(batch_i).zfill(4)}.pt",
@@ -111,19 +102,23 @@ def save_results(LF_original, result_filename="LF.pt", batch_size=BATCH_SIZE):
     LF_masks = []
     for img_i in range(n_imgs):
         batch_masks = []
-        max_segment_num = 0
         for batch_i in range(batch_size):
             filename = f"results/{str(img_i).zfill(4)}_{str(batch_i).zfill(4)}.pt"
             if not os.path.exists(filename):
                 continue
-            mask = torch.load(filename)
-            mask[mask != 0] += max_segment_num
-            max_segment_num = mask.max()
-            batch_masks.append(mask)
+            masks = torch.load(filename)
+            batch_masks.append(masks)
             os.remove(filename)
-        masks_i = torch.stack(batch_masks)
-        masks_i = torch.sum(masks_i, dim=0)
-        LF_masks.append(masks_i)
+        batch_masks = torch.cat(batch_masks, dim=0).to_dense()
+        areas = batch_masks.sum(dim=(1, 2))
+        masks_result = torch.zeros_like(batch_masks[0]).long()
+        for i, _ in enumerate(torch.argsort(areas, descending=True)):
+            masks_result[batch_masks[i]] += i
+            masks_result = torch.clip(masks_result, 0, i).long()
+        del batch_masks
+        del areas
+        LF_masks.append(masks_result)
+        del masks_result
     LF_masks = torch.stack(LF_masks).cuda().reshape(s, t, u, v)
     LF_masks = LF_lawnmower(LF_masks)
     torch.save(LF_masks, f"results/{result_filename}")
@@ -131,14 +126,16 @@ def save_results(LF_original, result_filename="LF.pt", batch_size=BATCH_SIZE):
 
 
 def main():
+    img_predictor = get_image_predictor()
+    video_predictor = get_video_predictor()
     dataset = HCIOldDataset("HCI_dataset_old")
     for i, item in enumerate(dataset):
         LF, _, _ = item
+        subview = LF[0][0]
+        masks = get_subview_masks(img_predictor, subview)
         save_LF_lawnmower(LF)
-        predictor = get_video_predictor()
-        inference(predictor, LF)
-        del predictor
-        torch.cuda.empty_cache()
+        masks_batchified = batchify_masks(masks)
+        propagate_masks(masks_batchified, video_predictor)
         save_results(
             LF,
             f"{str(i).zfill(4)}_result.pth",
@@ -147,11 +144,4 @@ def main():
 
 
 if __name__ == "__main__":
-    img_predictor = get_image_predictor()
-    video_predictor = get_video_predictor()
-    dataset = HCIOldDataset("HCI_dataset_old")
-    LF, _, _ = dataset[0]
-    subview = LF[0][0]
-    masks = get_subview_masks(img_predictor, subview)
-    masks_batchified = batchify_masks(masks)
-    propagate_masks(masks_batchified, video_predictor)
+    main()
