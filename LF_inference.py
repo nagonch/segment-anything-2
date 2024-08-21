@@ -8,7 +8,7 @@ from sam2.utils.amg import build_all_layer_point_grids
 import os
 import math
 import shutil
-from data import HCIOldDataset
+from data import UrbanLFDataset
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
 BATCH_SIZE = 10
@@ -128,7 +128,7 @@ def save_results(LF_original, result_filename="LF.pt", batch_size=BATCH_SIZE):
 def main():
     img_predictor = get_image_predictor()
     video_predictor = get_video_predictor()
-    dataset = HCIOldDataset("HCI_dataset_old")
+    dataset = UrbanLFDataset("HCI_dataset_old")
     for i, item in enumerate(dataset):
         LF, _, _ = item
         subview = LF[0][0]

@@ -7,6 +7,111 @@ import math
 import h5py
 
 
+class UrbanLFDataset(Dataset):
+    def __init__(self, data_path, return_disparity=True, return_labels=True):
+        self.data_path = data_path
+        self.return_disparity = return_disparity
+        self.return_labels = return_labels
+        self.frames = sorted(
+            [
+                item
+                for item in os.listdir(self.data_path)
+                if os.path.isdir(f"{self.data_path}/{item}")
+            ]
+        )
+        self.size = len(self.frames)
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, idx):
+        frame = self.frames[idx]
+        imgs = []
+        disparities = []
+        labels = []
+        for filename in sorted(os.listdir(f"{self.data_path}/{frame}")):
+            if (
+                filename.endswith("depth.png")
+                or filename.endswith("disparity.png")
+                or filename.endswith("label.png")
+            ):
+                continue
+            if filename.endswith(".png"):
+                img = np.array(Image.open(f"{self.data_path}/{frame}/{filename}"))
+                img = (torch.tensor(img))[:, :, :3]
+                imgs.append(img)
+            elif filename.endswith("disparity.npy"):
+                disparities.append(
+                    torch.tensor(np.load(f"{self.data_path}/{frame}/{filename}"))
+                )
+            elif filename.endswith("label.npy"):
+                labels.append(
+                    torch.tensor(np.load(f"{self.data_path}/{frame}/{filename}"))
+                )
+        LF = torch.stack(imgs)
+        n_apertures = int(math.sqrt(LF.shape[0]))
+        u, v, c = LF.shape[-3:]
+        LF = LF.reshape(
+            n_apertures,
+            n_apertures,
+            u,
+            v,
+            c,
+        ).numpy()
+        return_tuple = [
+            LF,
+        ]
+        if self.return_labels and labels:
+            if len(labels) == 1:
+                return_tuple.append(labels[0])
+            else:
+                labels = (
+                    torch.stack(labels)
+                    .reshape(
+                        n_apertures,
+                        n_apertures,
+                        u,
+                        v,
+                    )
+                    .numpy()
+                )
+                labels += 1
+                return_tuple.append(labels)
+        elif self.return_labels:
+            return_tuple.append(None)
+        if self.return_disparity and disparities:
+            disparities = (
+                torch.stack(disparities)
+                .reshape(
+                    n_apertures,
+                    n_apertures,
+                    u,
+                    v,
+                )
+                .cuda()
+            )
+            s_size, t_size, u_size, v_size = disparities.shape
+            disparities_result = torch.zeros(
+                (
+                    n_apertures,
+                    n_apertures,
+                    u,
+                    v,
+                    2,
+                )
+            ).cuda()
+            for s in range(s_size):
+                for t in range(t_size):
+                    baseline = (
+                        torch.tensor([s_size // 2 - s, t_size // 2 + t]).float().cuda()
+                    )
+                    disparities_result[s, t] = disparities[s, t][:, :, None] * baseline
+            return_tuple.append(disparities_result)
+        elif self.return_disparity:
+            return_tuple.append(None)
+        return return_tuple
+
+
 class HCIOldDataset(Dataset):
     def __init__(self, data_path="HCI_dataset_old"):
         self.data_path = data_path
