@@ -128,7 +128,7 @@ def save_results(LF_original, result_filename="LF.pt", batch_size=BATCH_SIZE):
 def main():
     img_predictor = get_image_predictor()
     video_predictor = get_video_predictor()
-    dataset = UrbanLFDataset("HCI_dataset_old")
+    dataset = UrbanLFDataset("UrbanLF_Syn/val")
     for i, item in enumerate(dataset):
         LF, _, _ = item
         subview = LF[0][0]

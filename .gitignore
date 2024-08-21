@@ -35,3 +35,5 @@ vendor/pkg/
 pyenv
 Vagrantfile
 *.h5
+UrbanLF_Real/*
+UrbanLF_Syn/*
