@@ -11,7 +11,7 @@ import shutil
 from data import UrbanLFDataset
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
-BATCH_SIZE = 10
+BATCH_SIZE = 81
 MODEL_CHECKPOINT = "checkpoints/sam2_hiera_tiny.pt"
 MODEL_CONFIG = "sam2_hiera_t.yaml"
 
@@ -96,7 +96,7 @@ def propagate_masks(masks_batchified, video_predictor):
                 )
 
 
-def save_results(LF_original, result_filename="LF.pt", batch_size=BATCH_SIZE):
+def save_results(LF_original, result_filename="results/LF.pt", batch_size=BATCH_SIZE):
     s, t, u, v, _ = LF_original.shape
     n_imgs = s * t
     LF_masks = []
@@ -121,7 +121,7 @@ def save_results(LF_original, result_filename="LF.pt", batch_size=BATCH_SIZE):
         del masks_result
     LF_masks = torch.stack(LF_masks).cuda().reshape(s, t, u, v)
     LF_masks = LF_lawnmower(LF_masks)
-    torch.save(LF_masks, f"results/{result_filename}")
+    torch.save(LF_masks, result_filename)
     del LF_masks
 
 
@@ -130,6 +130,9 @@ def main():
     video_predictor = get_video_predictor()
     dataset = UrbanLFDataset("UrbanLF_Syn/val")
     for i, item in enumerate(dataset):
+        result_filename = f"results/{str(i).zfill(4)}_result.pth"
+        if os.path.exists(result_filename):
+            continue
         LF, _, _ = item
         subview = LF[0][0]
         masks = get_subview_masks(img_predictor, subview)
@@ -138,7 +141,7 @@ def main():
         propagate_masks(masks_batchified, video_predictor)
         save_results(
             LF,
-            f"{str(i).zfill(4)}_result.pth",
+            result_filename,
         )
         shutil.rmtree("LF")
 
